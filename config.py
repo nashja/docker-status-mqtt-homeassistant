@@ -25,6 +25,7 @@ class Config:
         entity_name="Unraid Docker",
         entity_prefix=None,
         verbose=False,
+        enable_metrics=False,
     ):
         self.unraid_host = unraid_host or os.getenv("SSH_HOST")
         self.unraid_port = int(unraid_port or os.getenv("SSH_PORT", 22))
@@ -55,6 +56,7 @@ class Config:
         self.entity_prefix = entity_prefix
 
         self.verbose = verbose
+        self.enable_metrics = enable_metrics or os.getenv("ENABLE_METRICS", "false").lower() == "true"
 
         self.validate_config()
 

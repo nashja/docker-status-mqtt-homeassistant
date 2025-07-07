@@ -7,6 +7,7 @@ Monitor and control your Docker containers through Home Assistant via MQTT.
 This container publishes the status of your Docker containers to an MQTT broker and creates Home Assistant switch entities for each container. It allows you to:
 
 - **Monitor** container states (running/stopped) in real-time
+- **Track** container resource metrics (CPU, memory, network, disk I/O)
 - **Control** containers (start/stop) directly from Home Assistant
 - **Filter** which containers to monitor using include/exclude lists
 - **Auto-exclude** the monitoring container itself from the list
@@ -47,6 +48,7 @@ docker run -d \
 | `PUBLISH_INTERVAL` | Status update interval (seconds) | 60 | No |
 | `INCLUDE_ONLY` | Comma-separated container names to monitor | - | No |
 | `EXCLUDE_ONLY` | Comma-separated container names to exclude | - | No |
+| `ENABLE_METRICS` | Enable container metrics (CPU, memory, network, disk) | false | No |
 
 **Note**: The monitoring container automatically excludes itself from the list to prevent self-monitoring.
 
@@ -71,6 +73,16 @@ docker run -d \
   -e MQTT_SERVER=192.168.1.100 \
   -e MQTT_USER=homeassistant \
   -e MQTT_PASSWORD=mypassword \
+  pcarorevuelta/docker-status-mqtt-homeassistant
+```
+
+### Enable Container Metrics
+```bash
+docker run -d \
+  --name docker-status-mqtt \
+  -v /var/run/docker.sock:/var/run/docker.sock \
+  -e MQTT_SERVER=192.168.1.100 \
+  -e ENABLE_METRICS=true \
   pcarorevuelta/docker-status-mqtt-homeassistant
 ```
 
@@ -121,6 +133,7 @@ services:
       - MQTT_USER=homeassistant
       - MQTT_PASSWORD=mypassword
       - PUBLISH_INTERVAL=30
+      - ENABLE_METRICS=true
 ```
 
 ## Home Assistant Integration
@@ -143,9 +156,21 @@ The switches will appear in Home Assistant under MQTT integration with the abili
 
 ## MQTT Topics
 
-- **State**: `homeassistant/switch/unraid_docker_{container}/state`
-- **Command**: `homeassistant/switch/unraid_docker_{container}/set`
-- **Config**: `homeassistant/switch/unraid_docker_{container}/config` (auto-discovery)
+### Container Control (Switch Entities)
+- **State**: `homeassistant/switch/{entity_prefix}{container}/state`
+- **Command**: `homeassistant/switch/{entity_prefix}{container}/set`
+- **Config**: `homeassistant/switch/{entity_prefix}{container}/config` (auto-discovery)
+
+### Container Metrics (Sensor Entities)
+When `ENABLE_METRICS=true`, additional sensor entities are created:
+
+- **CPU Usage**: `homeassistant/sensor/{entity_prefix}{container}_cpu/state` (%)
+- **Memory Usage**: `homeassistant/sensor/{entity_prefix}{container}_memory/state` (%)
+- **Memory Usage (MB)**: `homeassistant/sensor/{entity_prefix}{container}_memory_usage/state` (MB)
+- **Network RX**: `homeassistant/sensor/{entity_prefix}{container}_network_rx/state` (MB)
+- **Network TX**: `homeassistant/sensor/{entity_prefix}{container}_network_tx/state` (MB)
+- **Disk Read**: `homeassistant/sensor/{entity_prefix}{container}_disk_read/state` (MB)
+- **Disk Write**: `homeassistant/sensor/{entity_prefix}{container}_disk_write/state` (MB)
 
 ## Health Checks
 

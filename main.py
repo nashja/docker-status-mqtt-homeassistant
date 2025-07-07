@@ -136,6 +136,11 @@ class DockerMQTT:
                 self.update_entity_status(container_name, container_state)
                 if container_name not in last_docker_statuses:
                     self.create_entity(container_name)
+                    if self.config.enable_metrics:
+                        self.create_metric_entities(container_name)
+                # Update metrics for running containers
+                if container_state.lower() == "running" and self.config.enable_metrics:
+                    self.update_container_metrics(container_name)
 
             # Update heartbeat file for health check
             self._update_heartbeat()
@@ -175,6 +180,8 @@ class DockerMQTT:
     def delete_entity(self, container_name):
         self.mqtt_client.publish(self._get_topic(container_name, "config"), "")
         self.mqtt_client.publish(self._get_topic(container_name, ""), "")
+        if self.config.enable_metrics:
+            self.delete_metric_entities(container_name)
         logger.debug(f"Configuración eliminada para {container_name}")
 
     def update_entity_status(self, container_name, container_state):
@@ -189,6 +196,115 @@ class DockerMQTT:
     def _get_topic(self, container_name, topic):
         assert topic in ["state", "command", "config", ""]
         return f"homeassistant/switch/{self.prefix}{container_name}/{topic}"
+    
+    def _get_sensor_topic(self, container_name, metric, topic):
+        """Get MQTT topic for sensor entities"""
+        assert topic in ["state", "config", ""]
+        return f"homeassistant/sensor/{self.prefix}{container_name}_{metric}/{topic}"
+    
+    def create_metric_entities(self, container_name):
+        """Create MQTT sensor entities for container metrics"""
+        metrics_config = {
+            'cpu': {
+                'name': f'{container_name} CPU',
+                'unit': '%',
+                'icon': 'mdi:cpu-64-bit',
+                'device_class': None,
+                'state_class': 'measurement'
+            },
+            'memory': {
+                'name': f'{container_name} Memory',
+                'unit': '%',
+                'icon': 'mdi:memory',
+                'device_class': None,
+                'state_class': 'measurement'
+            },
+            'memory_usage': {
+                'name': f'{container_name} Memory Usage',
+                'unit': 'MB',
+                'icon': 'mdi:memory',
+                'device_class': None,
+                'state_class': 'measurement'
+            },
+            'network_rx': {
+                'name': f'{container_name} Network RX',
+                'unit': 'MB',
+                'icon': 'mdi:download-network',
+                'device_class': None,
+                'state_class': 'total_increasing'
+            },
+            'network_tx': {
+                'name': f'{container_name} Network TX',
+                'unit': 'MB',
+                'icon': 'mdi:upload-network',
+                'device_class': None,
+                'state_class': 'total_increasing'
+            },
+            'disk_read': {
+                'name': f'{container_name} Disk Read',
+                'unit': 'MB',
+                'icon': 'mdi:harddisk',
+                'device_class': None,
+                'state_class': 'total_increasing'
+            },
+            'disk_write': {
+                'name': f'{container_name} Disk Write',
+                'unit': 'MB',
+                'icon': 'mdi:harddisk',
+                'device_class': None,
+                'state_class': 'total_increasing'
+            }
+        }
+        
+        for metric, config in metrics_config.items():
+            self.mqtt_client.publish(
+                self._get_sensor_topic(container_name, metric, "config"),
+                json.dumps({
+                    "name": config['name'],
+                    "unique_id": f"{self.prefix}{container_name}_{metric}",
+                    "state_topic": self._get_sensor_topic(container_name, metric, "state"),
+                    "unit_of_measurement": config['unit'],
+                    "icon": config['icon'],
+                    "device_class": config.get('device_class'),
+                    "state_class": config.get('state_class'),
+                    "device": self.device_config
+                }),
+                retain=True
+            )
+            logger.debug(f"Metric entity created for {container_name} - {metric}")
+    
+    def update_container_metrics(self, container_name):
+        """Update container resource metrics"""
+        if not self.config.enable_metrics:
+            return
+        
+        stats = self.docker_manager.get_container_stats(container_name)
+        if not stats:
+            return
+        
+        # Publish each metric
+        metrics_mapping = {
+            'cpu': stats.get('cpu_percent', 0),
+            'memory': stats.get('memory_percent', 0),
+            'memory_usage': stats.get('memory_usage_mb', 0),
+            'network_rx': stats.get('network_rx_mb', 0),
+            'network_tx': stats.get('network_tx_mb', 0),
+            'disk_read': stats.get('blkio_read_mb', 0),
+            'disk_write': stats.get('blkio_write_mb', 0)
+        }
+        
+        for metric, value in metrics_mapping.items():
+            self.mqtt_client.publish(
+                self._get_sensor_topic(container_name, metric, "state"),
+                str(value)
+            )
+    
+    def delete_metric_entities(self, container_name):
+        """Delete MQTT sensor entities for container metrics"""
+        metrics = ['cpu', 'memory', 'memory_usage', 'network_rx', 'network_tx', 'disk_read', 'disk_write']
+        for metric in metrics:
+            self.mqtt_client.publish(self._get_sensor_topic(container_name, metric, "config"), "")
+            self.mqtt_client.publish(self._get_sensor_topic(container_name, metric, ""), "")
 
 
 def main(args):
@@ -280,6 +396,11 @@ if __name__ == "__main__":
         "--entity_prefix",
         help="Prefijo de los dispositivos en Home Assistant",
         default=None,
+    )
+    parser.add_argument(
+        "--enable_metrics",
+        help="Habilitar métricas de contenedores (CPU, memoria, red, disco)",
+        action="store_true",
     )
 
     args = parser.parse_args()
