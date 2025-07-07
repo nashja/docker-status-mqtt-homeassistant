@@ -6,6 +6,7 @@ from docker_manager import (
     LocalCommandExecutor,
 )
 
+
 class Config:
     def __init__(
         self,
@@ -84,7 +85,10 @@ class Config:
         if mode == "ssh":
             return DockerCommandManager(
                 SSHCommandExecutor(
-                    self.unraid_host, self.unraid_port, self.unraid_user, self.unraid_password
+                    self.unraid_host,
+                    self.unraid_port,
+                    self.unraid_user,
+                    self.unraid_password,
                 ),
                 **params,
             )
