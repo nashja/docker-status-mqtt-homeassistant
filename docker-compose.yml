@@ -1,6 +1,10 @@
 services:
   docker-status-mqtt-homeassistant:
-    build: .
+    build:
+      context: .
+      platforms:
+        - "linux/amd64"
+        - "linux/arm64"
     container_name: docker-status-mqtt-homeassistant
     env_file:
       - .env
