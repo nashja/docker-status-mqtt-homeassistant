@@ -21,37 +21,37 @@ class DockerManager(ABC):
         if not self._self_excluded:
             self._auto_exclude_self()
             self._self_excluded = True
-            
+
         all_statuses = self.get_all_statuses()
         if self.include_only:
             return {k: v for k, v in all_statuses.items() if k in self.include_only}
         elif self.exclude:
             return {k: v for k, v in all_statuses.items() if k not in self.exclude}
         return all_statuses
-    
+
     def _auto_exclude_self(self):
         """Auto-exclude self container from monitoring"""
         try:
             # Method 1: Use hostname (usually the container name)
             hostname = socket.gethostname()
-            
+
             # Method 2: Check all containers to find ourselves
             all_statuses = self.get_all_statuses()
-            
+
             # Look for containers with common self names
             possible_self_names = [
                 hostname,
-                'docker-status-mqtt-homeassistant', 
-                'docker-status-mqtt',
-                'docker-status-mqtt-homea'  # Truncated version
+                "docker-status-mqtt-homeassistant",
+                "docker-status-mqtt",
+                "docker-status-mqtt-homea",  # Truncated version
             ]
-            
+
             for name in possible_self_names:
                 if name in all_statuses and name not in self.exclude:
                     self.exclude.append(name)
                     logger.info(f"Auto-excluding self container: {name}")
                     break
-                    
+
         except Exception as e:
             logger.debug(f"Could not auto-exclude self container: {e}")
 
