@@ -124,6 +124,12 @@ The switches will appear in Home Assistant under MQTT integration with the abili
 - View current container state (on = running, off = stopped)
 - Start/stop containers by toggling the switch
 
+### Home Assistant UI Example
+
+![Home Assistant MQTT Integration](https://raw.githubusercontent.com/pcaro/docker-status-mqtt-homeassistant/main/home-assistant-screenshot.png)
+
+*Example showing Docker containers as controllable switches in Home Assistant's MQTT integration*
+
 ## MQTT Topics
 
 - **State**: `homeassistant/switch/unraid_docker_{container}/state`
