@@ -9,6 +9,7 @@ This container publishes the status of your Docker containers to an MQTT broker 
 - **Monitor** container states (running/stopped) in real-time
 - **Control** containers (start/stop) directly from Home Assistant
 - **Filter** which containers to monitor using include/exclude lists
+- **Auto-exclude** the monitoring container itself from the list
 - **Connect** to local or remote Docker hosts via SSH
 
 Originally created for Unraid servers but works with any Docker host.
@@ -38,6 +39,8 @@ docker run -d \
 | `PUBLISH_INTERVAL` | Status update interval (seconds) | 60 | No |
 | `INCLUDE_ONLY` | Comma-separated container names to monitor | - | No |
 | `EXCLUDE_ONLY` | Comma-separated container names to exclude | - | No |
+
+**Note**: The monitoring container automatically excludes itself from the list to prevent self-monitoring.
 
 ### SSH Mode (Remote Docker Host)
 
