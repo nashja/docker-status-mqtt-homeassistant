@@ -83,6 +83,8 @@ docker logs docker-status-mqtt-homeassistant
 - **Home Assistant Integration**: Creates sensor entities with appropriate device classes and state classes
 - **Multi-Mode Support**: Works with Docker socket, SSH, and local command execution
 - **Performance**: Metrics collected only for running containers during regular status updates
+- **Change Detection**: Only publishes values when they change (threshold: 0.01 for metrics, state change for container status)
+- **MQTT Optimization**: Reduces unnecessary MQTT traffic by tracking previous values
 
 ## Future Enhancements Priority
 1. Add comprehensive test coverage for main.py and config.py

@@ -35,6 +35,7 @@ class DockerMQTT:
         }
 
         self.known_docker_statuses = {}
+        self.known_container_metrics = {}  # Track last published metrics
 
         self.mqtt_client = mqtt.Client(mqtt.CallbackAPIVersion.VERSION2)
         self.mqtt_client.username_pw_set(config.mqtt_user, config.mqtt_password)
@@ -141,6 +142,10 @@ class DockerMQTT:
                 # Update metrics for running containers
                 if container_state.lower() == "running" and self.config.enable_metrics:
                     self.update_container_metrics(container_name)
+                elif container_state.lower() != "running" and self.config.enable_metrics:
+                    # Clean up metrics cache for stopped containers
+                    if container_name in self.known_container_metrics:
+                        del self.known_container_metrics[container_name]
 
             # Update heartbeat file for health check
             self._update_heartbeat()
@@ -182,16 +187,24 @@ class DockerMQTT:
         self.mqtt_client.publish(self._get_topic(container_name, ""), "")
         if self.config.enable_metrics:
             self.delete_metric_entities(container_name)
+            # Clean up metrics cache
+            if container_name in self.known_container_metrics:
+                del self.known_container_metrics[container_name]
         logger.debug(f"Configuración eliminada para {container_name}")
 
     def update_entity_status(self, container_name, container_state):
         """
-        Publish the state of the container to the MQTT broker
-        Possible docker ontainer states are: created, running, paused, restarting, removing, exited and dead.
+        Publish the state of the container to the MQTT broker only if changed
+        Possible docker container states are: created, running, paused, restarting, removing, exited and dead.
         But we are only interested in running and stopped containers
         """
         state = "ON" if container_state.lower() == "running" else "OFF"
-        self.mqtt_client.publish(self._get_topic(container_name, "state"), state)
+        
+        # Only publish if state has changed
+        last_state = self.known_docker_statuses.get(container_name)
+        if last_state is None or (last_state.lower() == "running") != (container_state.lower() == "running"):
+            self.mqtt_client.publish(self._get_topic(container_name, "state"), state)
+            logger.debug(f"Estado actualizado para {container_name}: {state}")
 
     def _get_topic(self, container_name, topic):
         assert topic in ["state", "command", "config", ""]
@@ -274,7 +287,7 @@ class DockerMQTT:
             logger.debug(f"Metric entity created for {container_name} - {metric}")
     
     def update_container_metrics(self, container_name):
-        """Update container resource metrics"""
+        """Update container resource metrics only if changed"""
         if not self.config.enable_metrics:
             return
         
@@ -282,22 +295,31 @@ class DockerMQTT:
         if not stats:
             return
         
-        # Publish each metric
-        metrics_mapping = {
-            'cpu': stats.get('cpu_percent', 0),
-            'memory': stats.get('memory_percent', 0),
-            'memory_usage': stats.get('memory_usage_mb', 0),
-            'network_rx': stats.get('network_rx_mb', 0),
-            'network_tx': stats.get('network_tx_mb', 0),
-            'disk_read': stats.get('blkio_read_mb', 0),
-            'disk_write': stats.get('blkio_write_mb', 0)
+        # Get current metrics
+        current_metrics = {
+            'cpu': round(stats.get('cpu_percent', 0), 2),
+            'memory': round(stats.get('memory_percent', 0), 2),
+            'memory_usage': round(stats.get('memory_usage_mb', 0), 2),
+            'network_rx': round(stats.get('network_rx_mb', 0), 2),
+            'network_tx': round(stats.get('network_tx_mb', 0), 2),
+            'disk_read': round(stats.get('blkio_read_mb', 0), 2),
+            'disk_write': round(stats.get('blkio_write_mb', 0), 2)
         }
         
-        for metric, value in metrics_mapping.items():
-            self.mqtt_client.publish(
-                self._get_sensor_topic(container_name, metric, "state"),
-                str(value)
-            )
+        # Get last known metrics for this container
+        last_metrics = self.known_container_metrics.get(container_name, {})
+        
+        # Only publish metrics that have changed
+        for metric, value in current_metrics.items():
+            if metric not in last_metrics or abs(last_metrics[metric] - value) >= 0.01:  # Threshold for change
+                self.mqtt_client.publish(
+                    self._get_sensor_topic(container_name, metric, "state"),
+                    str(value)
+                )
+                logger.debug(f"Métrica actualizada para {container_name}.{metric}: {value}")
+        
+        # Update known metrics
+        self.known_container_metrics[container_name] = current_metrics
     
     def delete_metric_entities(self, container_name):
         """Delete MQTT sensor entities for container metrics"""
