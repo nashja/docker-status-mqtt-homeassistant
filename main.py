@@ -137,8 +137,20 @@ class DockerMQTT:
                 if container_name not in last_docker_statuses:
                     self.create_entity(container_name)
 
+            # Update heartbeat file for health check
+            self._update_heartbeat()
+
         except Exception as e:
             logger.error(f"Error al publicar el estado de los contenedores: {str(e)}")
+    
+    def _update_heartbeat(self):
+        """Update heartbeat file for health checks"""
+        try:
+            import pathlib
+            heartbeat_file = pathlib.Path('/tmp/docker-status-mqtt-heartbeat')
+            heartbeat_file.touch()
+        except Exception as e:
+            logger.debug(f"Failed to update heartbeat: {e}")
 
     def create_entity(self, container_name):
         self.mqtt_client.publish(

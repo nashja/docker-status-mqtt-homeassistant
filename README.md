@@ -139,6 +139,29 @@ The switches will appear in Home Assistant under MQTT integration with the abili
 - **Command**: `homeassistant/switch/unraid_docker_{container}/set`
 - **Config**: `homeassistant/switch/unraid_docker_{container}/config` (auto-discovery)
 
+## Health Checks
+
+The container includes comprehensive health checks that validate:
+
+- **MQTT Connectivity**: Verifies connection to the MQTT broker
+- **Docker API Access**: Tests the active connection method (socket/SSH/local commands)
+- **Process Health**: Confirms the main service is running
+- **Service Activity**: Checks for recent heartbeat updates
+
+The health check automatically detects and validates only the active Docker connection mode.
+
+Health checks run every 60 seconds with a 30-second timeout. The container is considered unhealthy after 3 consecutive failures.
+
+You can manually run the health check:
+```bash
+docker exec container_name uv run healthcheck.py
+```
+
+Or check the container health status:
+```bash
+docker inspect --format='{{.State.Health.Status}}' container_name
+```
+
 ## Troubleshooting
 
 ### Permission Denied Error (Docker Socket)
