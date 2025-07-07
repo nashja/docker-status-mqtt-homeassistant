@@ -14,6 +14,14 @@ This container publishes the status of your Docker containers to an MQTT broker 
 
 Originally created for Unraid servers but works with any Docker host.
 
+### Multi-Architecture Support
+
+This image supports multiple architectures:
+- **linux/amd64** (x86_64) - Intel/AMD processors
+- **linux/arm64** (aarch64) - ARM64 processors (Raspberry Pi 4, Apple Silicon, etc.)
+
+Docker will automatically pull the correct image for your architecture.
+
 ## Quick Start
 
 ```bash

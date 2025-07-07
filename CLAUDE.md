@@ -68,10 +68,12 @@ docker logs docker-status-mqtt-homeassistant
 - Creates heartbeat file in `/tmp/docker-status-mqtt-heartbeat` for activity tracking
 - Runs every 60s with 30s timeout and 3 retry attempts
 
+## Multi-Architecture Support
+- Docker images are built for both **linux/amd64** and **linux/arm64**
+- GitHub Actions workflow automatically builds and publishes multi-arch images
+- Docker Compose supports platform specifications for local builds
+- Users on ARM devices (Raspberry Pi, etc.) can use the same image
+
 ## Future Enhancements Priority
-1. Async architecture with aiomqtt/aiodocker
-2. Add container metrics (CPU, memory, disk, network)
-3. Implement proper health checks
-4. Add comprehensive test coverage
-5. Support for Docker secrets/vault
-6. Multi-architecture builds (ARM support)
+1. Add container metrics (CPU, memory, disk, network)
+2. Add comprehensive test coverage
