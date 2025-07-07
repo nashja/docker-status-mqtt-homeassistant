@@ -1,59 +1,149 @@
-# Docker Status MQTT
+# Docker Status MQTT Home Assistant
 
-This is a script that publishes the status of your Docker containers to an MQTT broker, allowing you to integrate it with home automation systems like Home Assistant. It can connect to a remote Docker host via SSH or interface directly with the Docker socket.
+Monitor and control your Docker containers through Home Assistant via MQTT.
 
-This was created for my Unraid server, but should work with any Docker host.
+## Overview
 
-## Features
+This container publishes the status of your Docker containers to an MQTT broker and creates Home Assistant switch entities for each container. It allows you to:
 
-- Publishes container statuses (running or off) to MQTT.
-- Dynamically creates and removes entities in Home Assistant.
-- Allows starting and stopping containers via MQTT commands.
-- Supports remote Docker hosts via SSH.
-- Configurable update interval and MQTT credentials.
-- Filter containers with include/exclude lists.
+- **Monitor** container states (running/stopped) in real-time
+- **Control** containers (start/stop) directly from Home Assistant
+- **Filter** which containers to monitor using include/exclude lists
+- **Connect** to local or remote Docker hosts via SSH
 
-## Usage
+Originally created for Unraid servers but works with any Docker host.
 
-You can use the [image hosted on docker hub](https://hub.docker.com/repository/docker/pcarorevuelta/docker-status-mqtt-homeassistant/)
+## Quick Start
 
-1. Configure:
-
-    Copy the `.env.example` file to `.env` and fill in your MQTT broker details, credentials, and optional SSH settings.
-
-2. Run the Docker container using docker or docker-compose:
-
-    ```bash
-    docker run -d --name docker-status-mqtt-homeassistant --env-file .env pcarorevuelta/docker-status-mqtt-homeassistant
-    ```
-
-    ```bash
-    docker-compose up -d
-    ```
+```bash
+docker run -d \
+  --name docker-status-mqtt \
+  -v /var/run/docker.sock:/var/run/docker.sock \
+  -e MQTT_SERVER=YOUR_MQTT_IP \
+  -e MQTT_USER=YOUR_MQTT_USER \
+  -e MQTT_PASSWORD=YOUR_MQTT_PASSWORD \
+  pcarorevuelta/docker-status-mqtt-homeassistant
+```
 
 ## Configuration
 
-The script is configured using environment variables stored in the `.env` file:
+### Environment Variables
 
-- `SSH_HOST`: IP address or hostname of the remote Docker server (optional, for SSH mode).
-- `SSH_PORT`: SSH port of the remote Docker server (default: 22).
-- `SSH_USER`: Username for SSH connection.
-- `SSH_PASSWORD`: Password for SSH connection.
-- `MQTT_SERVER`: IP address or hostname of the MQTT broker.
-- `MQTT_PORT`: Port of the MQTT broker (default: 1883).
-- `MQTT_USER`: Username for MQTT authentication.
-- `MQTT_PASSWORD`: Password for MQTT authentication.
-- `PUBLISH_INTERVAL`: Interval in seconds for publishing container statuses (default: 60).
-- `INCLUDE_ONLY`: Comma-separated list of container names to monitor (optional). If specified, only these containers will be monitored.
-- `EXCLUDE_ONLY`: Comma-separated list of container names to exclude from monitoring (optional). Cannot be used with INCLUDE_ONLY.
+| Variable | Description | Default | Required |
+|----------|-------------|---------|----------|
+| `MQTT_SERVER` | MQTT broker IP/hostname | - | Yes |
+| `MQTT_USER` | MQTT username | - | No |
+| `MQTT_PASSWORD` | MQTT password | - | No |
+| `MQTT_PORT` | MQTT broker port | 1883 | No |
+| `PUBLISH_INTERVAL` | Status update interval (seconds) | 60 | No |
+| `INCLUDE_ONLY` | Comma-separated container names to monitor | - | No |
+| `EXCLUDE_ONLY` | Comma-separated container names to exclude | - | No |
+
+### SSH Mode (Remote Docker Host)
+
+| Variable | Description | Default | Required |
+|----------|-------------|---------|----------|
+| `SSH_HOST` | Remote Docker host IP/hostname | - | No* |
+| `SSH_PORT` | SSH port | 22 | No |
+| `SSH_USER` | SSH username | - | No* |
+| `SSH_PASSWORD` | SSH password | - | No* |
+
+*Required only for SSH mode
+
+## Usage Examples
+
+### Local Docker Socket (Default)
+```bash
+docker run -d \
+  --name docker-status-mqtt \
+  -v /var/run/docker.sock:/var/run/docker.sock \
+  -e MQTT_SERVER=192.168.1.100 \
+  -e MQTT_USER=homeassistant \
+  -e MQTT_PASSWORD=mypassword \
+  pcarorevuelta/docker-status-mqtt-homeassistant
+```
+
+### Remote Docker via SSH
+```bash
+docker run -d \
+  --name docker-status-mqtt \
+  -e SSH_HOST=192.168.1.50 \
+  -e SSH_USER=root \
+  -e SSH_PASSWORD=rootpassword \
+  -e MQTT_SERVER=192.168.1.100 \
+  -e MQTT_USER=homeassistant \
+  -e MQTT_PASSWORD=mypassword \
+  pcarorevuelta/docker-status-mqtt-homeassistant
+```
+
+### Filter Containers
+```bash
+# Monitor only specific containers
+docker run -d \
+  --name docker-status-mqtt \
+  -v /var/run/docker.sock:/var/run/docker.sock \
+  -e MQTT_SERVER=192.168.1.100 \
+  -e INCLUDE_ONLY=plex,sonarr,radarr \
+  pcarorevuelta/docker-status-mqtt-homeassistant
+
+# Exclude specific containers
+docker run -d \
+  --name docker-status-mqtt \
+  -v /var/run/docker.sock:/var/run/docker.sock \
+  -e MQTT_SERVER=192.168.1.100 \
+  -e EXCLUDE_ONLY=watchtower,portainer \
+  pcarorevuelta/docker-status-mqtt-homeassistant
+```
+
+## Docker Compose
+
+```yaml
+services:
+  docker-status-mqtt-homeassistant:
+    image: pcarorevuelta/docker-status-mqtt-homeassistant
+    container_name: docker-status-mqtt
+    restart: unless-stopped
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+    environment:
+      - MQTT_SERVER=192.168.1.100
+      - MQTT_USER=homeassistant
+      - MQTT_PASSWORD=mypassword
+      - PUBLISH_INTERVAL=30
+```
 
 ## Home Assistant Integration
 
-Once the script is running and connected to your MQTT broker, you can add it to Home Assistant:
+Once running, the container will:
 
-1. Make sure you have the MQTT integration set up in Home Assistant.
-2. The script will automatically publish entities for your containers to the `homeassistant/switch` topic.
-3. You can then add these entities to your Home Assistant dashboard.
+1. Automatically create MQTT switch entities for each Docker container
+2. Publish container states to `homeassistant/switch/{container_name}/state`
+3. Listen for commands on `homeassistant/switch/{container_name}/set`
+
+The switches will appear in Home Assistant under MQTT integration with the ability to:
+- View current container state (on = running, off = stopped)
+- Start/stop containers by toggling the switch
+
+## MQTT Topics
+
+- **State**: `homeassistant/switch/unraid_docker_{container}/state`
+- **Command**: `homeassistant/switch/unraid_docker_{container}/set`
+- **Config**: `homeassistant/switch/unraid_docker_{container}/config` (auto-discovery)
+
+## Support
+
+- **GitHub**: [https://github.com/pcaro/docker-status-mqtt-homeassistant](https://github.com/pcaro/docker-status-mqtt-homeassistant)
+- **Issues**: [https://github.com/pcaro/docker-status-mqtt-homeassistant/issues](https://github.com/pcaro/docker-status-mqtt-homeassistant/issues)
+
+## Development
+
+### Using .env file
+
+For development, you can use a `.env` file instead of environment variables:
+
+1. Copy `.env.example` to `.env`
+2. Fill in your configuration
+3. Run with: `docker run -d --name docker-status-mqtt --env-file .env pcarorevuelta/docker-status-mqtt-homeassistant`
 
 ## Contributing
 
@@ -61,4 +151,4 @@ Pull requests are welcome. For major changes, please open an issue first to disc
 
 ## License
 
-[MIT](https://choosealicense.com/licenses/mit/)
+MIT
