@@ -130,6 +130,36 @@ The switches will appear in Home Assistant under MQTT integration with the abili
 - **Command**: `homeassistant/switch/unraid_docker_{container}/set`
 - **Config**: `homeassistant/switch/unraid_docker_{container}/config` (auto-discovery)
 
+## Troubleshooting
+
+### Permission Denied Error (Docker Socket)
+
+If you get a "Permission denied" error when accessing the Docker socket:
+
+**For Unraid users:**
+- Make sure you're running the container as root (default behavior)
+- Verify the Docker socket path is correct: `/var/run/docker.sock:/var/run/docker.sock`
+
+**For other systems:**
+```bash
+# Option 1: Run with user matching docker group
+docker run -d \
+  --name docker-status-mqtt \
+  --user $(id -u):$(getent group docker | cut -d: -f3) \
+  -v /var/run/docker.sock:/var/run/docker.sock \
+  -e MQTT_SERVER=YOUR_MQTT_IP \
+  pcarorevuelta/docker-status-mqtt-homeassistant
+
+# Option 2: Add your user to docker group
+sudo usermod -aG docker $USER
+```
+
+### MQTT Connection Issues
+
+- Verify MQTT broker is accessible from the container
+- Check MQTT credentials are correct
+- Ensure MQTT_SERVER uses IP address or resolvable hostname
+
 ## Support
 
 - **GitHub**: [https://github.com/pcaro/docker-status-mqtt-homeassistant](https://github.com/pcaro/docker-status-mqtt-homeassistant)

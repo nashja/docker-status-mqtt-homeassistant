@@ -9,15 +9,8 @@ COPY . .
 # Install dependencies (package needs to be installed for uv to work)
 RUN uv sync
 
-# Create non-root user for security
-RUN addgroup -g 1001 -S appgroup && \
-    adduser -S appuser -u 1001 -G appgroup
-
-# Change ownership of app directory
-RUN chown -R appuser:appgroup /app
-
-# Switch to non-root user
-USER appuser
+# Note: Running as root for Docker socket access
+# In production, consider using Docker socket proxy or adjusting permissions
 
 # Health check
 HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
