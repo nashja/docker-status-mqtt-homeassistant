@@ -11,6 +11,7 @@ This was created for my Unraid server, but should work with any Docker host.
 - Allows starting and stopping containers via MQTT commands.
 - Supports remote Docker hosts via SSH.
 - Configurable update interval and MQTT credentials.
+- Filter containers with include/exclude lists.
 
 ## Usage
 
@@ -34,15 +35,17 @@ You can use the [image hosted on docker hub](https://hub.docker.com/repository/d
 
 The script is configured using environment variables stored in the `.env` file:
 
-- `SSH_HOST`: IP address or hostname of the remote Unraid server (optional, for SSH mode).
-- `SSH_PORT`: SSH port of the remote Unraid server (default: 22).
+- `SSH_HOST`: IP address or hostname of the remote Docker server (optional, for SSH mode).
+- `SSH_PORT`: SSH port of the remote Docker server (default: 22).
 - `SSH_USER`: Username for SSH connection.
 - `SSH_PASSWORD`: Password for SSH connection.
-- `MQTT_URL`: IP address or hostname of the MQTT broker.
+- `MQTT_SERVER`: IP address or hostname of the MQTT broker.
 - `MQTT_PORT`: Port of the MQTT broker (default: 1883).
 - `MQTT_USER`: Username for MQTT authentication.
 - `MQTT_PASSWORD`: Password for MQTT authentication.
 - `PUBLISH_INTERVAL`: Interval in seconds for publishing container statuses (default: 60).
+- `INCLUDE_ONLY`: Comma-separated list of container names to monitor (optional). If specified, only these containers will be monitored.
+- `EXCLUDE_ONLY`: Comma-separated list of container names to exclude from monitoring (optional). Cannot be used with INCLUDE_ONLY.
 
 ## Home Assistant Integration
 
