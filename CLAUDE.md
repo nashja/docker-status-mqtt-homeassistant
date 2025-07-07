@@ -63,6 +63,7 @@ docker logs docker-status-mqtt-homeassistant
 
 ## Health Check System
 - `healthcheck.py`: Comprehensive health validation script
+- Auto-detects operation mode (socket/SSH/local) and tests appropriate connectivity
 - Tests MQTT connectivity, Docker API access, process health, and service activity
 - Creates heartbeat file in `/tmp/docker-status-mqtt-heartbeat` for activity tracking
 - Runs every 60s with 30s timeout and 3 retry attempts

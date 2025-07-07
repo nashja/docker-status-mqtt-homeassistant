@@ -73,76 +73,137 @@ def check_mqtt_connectivity():
         logger.error(f"MQTT check failed: {e}")
         return False
 
+def get_operation_mode():
+    """Determine the operation mode based on environment variables"""
+    use_cmd_local = os.getenv('USE_CMD_LOCAL', '').lower() in ['true', '1', 'yes']
+    ssh_host = os.getenv('SSH_HOST')
+    
+    if use_cmd_local:
+        return "local"
+    elif ssh_host:
+        return "ssh"
+    else:
+        return "socket"
+
 def check_docker_connectivity():
-    """Test Docker API connectivity"""
+    """Test Docker API connectivity based on current operation mode"""
     try:
-        # Check if running in SSH mode
-        ssh_host = os.getenv('SSH_HOST')
-        if ssh_host:
-            # SSH mode - test SSH connectivity
-            import paramiko
-            ssh_port = int(os.getenv('SSH_PORT', 22))
-            ssh_user = os.getenv('SSH_USER')
-            ssh_password = os.getenv('SSH_PASSWORD')
-            
-            if not all([ssh_user, ssh_password]):
-                logger.error("SSH credentials not properly configured")
-                return False
-            
-            ssh = paramiko.SSHClient()
-            ssh.set_missing_host_key_policy(paramiko.AutoAddPolicy())
-            
-            try:
-                ssh.connect(
-                    ssh_host, 
-                    port=ssh_port, 
-                    username=ssh_user, 
-                    password=ssh_password,
-                    timeout=5
-                )
-                
-                # Test docker command
-                stdin, stdout, stderr = ssh.exec_command("docker version --format '{{.Server.Version}}'", timeout=5)
-                exit_code = stdout.channel.recv_exit_status()
-                
-                if exit_code == 0:
-                    logger.debug(f"SSH Docker connection to {ssh_host} successful")
-                    return True
-                else:
-                    error = stderr.read().decode()
-                    logger.error(f"Docker command failed via SSH: {error}")
-                    return False
-                    
-            except Exception as e:
-                logger.error(f"SSH connection error: {e}")
-                return False
-            finally:
-                ssh.close()
+        mode = get_operation_mode()
+        logger.debug(f"Checking Docker connectivity for mode: {mode}")
+        
+        if mode == "ssh":
+            return _check_ssh_docker_connectivity()
+        elif mode == "socket":
+            return _check_socket_docker_connectivity()
+        elif mode == "local":
+            return _check_local_docker_connectivity()
         else:
-            # Local Docker socket mode
-            import docker
+            logger.error(f"Unknown operation mode: {mode}")
+            return False
             
-            try:
-                client = docker.from_env()
-                
-                # Test API call with timeout
-                client.ping()
-                
-                # Quick test to list containers
-                containers = client.containers.list(limit=1)
-                
-                logger.debug("Docker socket connection successful")
-                return True
-                
-            except Exception as e:
-                logger.error(f"Docker socket connection error: {e}")
-                return False
-            
-    except ImportError as e:
-        logger.error(f"Required library not available: {e}")
-        return False
     except Exception as e:
         logger.error(f"Docker connectivity check failed: {e}")
+        return False
+
+def _check_ssh_docker_connectivity():
+    """Test SSH Docker connectivity"""
+    try:
+        import paramiko
+        
+        ssh_host = os.getenv('SSH_HOST')
+        ssh_port = int(os.getenv('SSH_PORT', 22))
+        ssh_user = os.getenv('SSH_USER')
+        ssh_password = os.getenv('SSH_PASSWORD')
+        
+        if not all([ssh_host, ssh_user, ssh_password]):
+            logger.error("SSH credentials not properly configured")
+            return False
+        
+        ssh = paramiko.SSHClient()
+        ssh.set_missing_host_key_policy(paramiko.AutoAddPolicy())
+        
+        try:
+            ssh.connect(
+                ssh_host, 
+                port=ssh_port, 
+                username=ssh_user, 
+                password=ssh_password,
+                timeout=5
+            )
+            
+            # Test docker command
+            stdin, stdout, stderr = ssh.exec_command("docker version --format '{{.Server.Version}}'", timeout=5)
+            exit_code = stdout.channel.recv_exit_status()
+            
+            if exit_code == 0:
+                logger.debug(f"SSH Docker connection to {ssh_host} successful")
+                return True
+            else:
+                error = stderr.read().decode()
+                logger.error(f"Docker command failed via SSH: {error}")
+                return False
+                
+        except Exception as e:
+            logger.error(f"SSH connection error: {e}")
+            return False
+        finally:
+            ssh.close()
+            
+    except ImportError:
+        logger.error("paramiko library not available for SSH mode")
+        return False
+
+def _check_socket_docker_connectivity():
+    """Test Docker socket connectivity"""
+    try:
+        import docker
+        
+        client = docker.from_env()
+        
+        # Test API call with timeout
+        client.ping()
+        
+        # Quick test to list containers
+        containers = client.containers.list(limit=1)
+        
+        logger.debug("Docker socket connection successful")
+        return True
+        
+    except ImportError:
+        logger.error("docker library not available for socket mode")
+        return False
+    except Exception as e:
+        logger.error(f"Docker socket connection error: {e}")
+        return False
+
+def _check_local_docker_connectivity():
+    """Test local Docker command connectivity"""
+    try:
+        import subprocess
+        
+        # Test docker command
+        result = subprocess.run(
+            ['docker', 'version', '--format', '{{.Server.Version}}'],
+            capture_output=True,
+            text=True,
+            timeout=5
+        )
+        
+        if result.returncode == 0:
+            logger.debug("Local Docker command successful")
+            return True
+        else:
+            logger.error(f"Docker command failed: {result.stderr}")
+            return False
+            
+    except FileNotFoundError:
+        logger.error("docker command not found")
+        return False
+    except subprocess.TimeoutExpired:
+        logger.error("Docker command timed out")
+        return False
+    except Exception as e:
+        logger.error(f"Local Docker command error: {e}")
         return False
 
 def check_process_health():

@@ -144,9 +144,11 @@ The switches will appear in Home Assistant under MQTT integration with the abili
 The container includes comprehensive health checks that validate:
 
 - **MQTT Connectivity**: Verifies connection to the MQTT broker
-- **Docker API Access**: Tests Docker socket or SSH connectivity
+- **Docker API Access**: Tests the active connection method (socket/SSH/local commands)
 - **Process Health**: Confirms the main service is running
 - **Service Activity**: Checks for recent heartbeat updates
+
+The health check automatically detects and validates only the active Docker connection mode.
 
 Health checks run every 60 seconds with a 30-second timeout. The container is considered unhealthy after 3 consecutive failures.
 
