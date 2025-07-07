@@ -25,7 +25,7 @@ This project monitors Docker containers and publishes their status to MQTT for H
 ## Development Commands
 ```bash
 # Run tests
-python -m pytest test_docker_manager.py
+uv run pytest test_docker_manager.py
 
 # Build Docker image
 docker build -t docker-status-mqtt-homeassistant .
@@ -59,7 +59,13 @@ docker logs docker-status-mqtt-homeassistant
 - Always use .env.example as template
 - Never commit real credentials
 - Project uses `uv` for Python dependency management
-- Dockerfile health check only verifies imports, not actual service health
+- Comprehensive health checks validate MQTT, Docker API, and service status
+
+## Health Check System
+- `healthcheck.py`: Comprehensive health validation script
+- Tests MQTT connectivity, Docker API access, process health, and service activity
+- Creates heartbeat file in `/tmp/docker-status-mqtt-heartbeat` for activity tracking
+- Runs every 60s with 30s timeout and 3 retry attempts
 
 ## Future Enhancements Priority
 1. Async architecture with aiomqtt/aiodocker
