@@ -126,7 +126,6 @@ class DockerMQTT:
         try:
             docker_statuses = self.docker_manager.get_docker_statuses()
             last_docker_statuses = self.known_docker_statuses
-            self.known_docker_statuses = docker_statuses
 
             running_containers = sorted(
                 [c for c in docker_statuses if docker_statuses[c].lower() == "running"]
@@ -142,22 +141,28 @@ class DockerMQTT:
                 # Update metrics for running containers
                 if container_state.lower() == "running" and self.config.enable_metrics:
                     self.update_container_metrics(container_name)
-                elif container_state.lower() != "running" and self.config.enable_metrics:
+                elif (
+                    container_state.lower() != "running" and self.config.enable_metrics
+                ):
                     # Clean up metrics cache for stopped containers
                     if container_name in self.known_container_metrics:
                         del self.known_container_metrics[container_name]
+
+            # Update known statuses after processing all containers
+            self.known_docker_statuses = docker_statuses
 
             # Update heartbeat file for health check
             self._update_heartbeat()
 
         except Exception as e:
             logger.error(f"Error al publicar el estado de los contenedores: {str(e)}")
-    
+
     def _update_heartbeat(self):
         """Update heartbeat file for health checks"""
         try:
             import pathlib
-            heartbeat_file = pathlib.Path('/tmp/docker-status-mqtt-heartbeat')
+
+            heartbeat_file = pathlib.Path("/tmp/docker-status-mqtt-heartbeat")
             heartbeat_file.touch()
         except Exception as e:
             logger.debug(f"Failed to update heartbeat: {e}")
@@ -199,134 +204,155 @@ class DockerMQTT:
         But we are only interested in running and stopped containers
         """
         state = "ON" if container_state.lower() == "running" else "OFF"
-        
+
         # Only publish if state has changed
         last_state = self.known_docker_statuses.get(container_name)
-        if last_state is None or (last_state.lower() == "running") != (container_state.lower() == "running"):
+        if last_state is None or (last_state.lower() == "running") != (
+            container_state.lower() == "running"
+        ):
             self.mqtt_client.publish(self._get_topic(container_name, "state"), state)
             logger.debug(f"Estado actualizado para {container_name}: {state}")
 
     def _get_topic(self, container_name, topic):
         assert topic in ["state", "command", "config", ""]
         return f"homeassistant/switch/{self.prefix}{container_name}/{topic}"
-    
+
     def _get_sensor_topic(self, container_name, metric, topic):
         """Get MQTT topic for sensor entities"""
         assert topic in ["state", "config", ""]
         return f"homeassistant/sensor/{self.prefix}{container_name}_{metric}/{topic}"
-    
+
     def create_metric_entities(self, container_name):
         """Create MQTT sensor entities for container metrics"""
         metrics_config = {
-            'cpu': {
-                'name': f'{container_name} CPU',
-                'unit': '%',
-                'icon': 'mdi:cpu-64-bit',
-                'device_class': None,
-                'state_class': 'measurement'
+            "cpu": {
+                "name": f"{container_name} CPU",
+                "unit": "%",
+                "icon": "mdi:cpu-64-bit",
+                "device_class": None,
+                "state_class": "measurement",
             },
-            'memory': {
-                'name': f'{container_name} Memory',
-                'unit': '%',
-                'icon': 'mdi:memory',
-                'device_class': None,
-                'state_class': 'measurement'
+            "memory": {
+                "name": f"{container_name} Memory",
+                "unit": "%",
+                "icon": "mdi:memory",
+                "device_class": None,
+                "state_class": "measurement",
             },
-            'memory_usage': {
-                'name': f'{container_name} Memory Usage',
-                'unit': 'MB',
-                'icon': 'mdi:memory',
-                'device_class': None,
-                'state_class': 'measurement'
+            "memory_usage": {
+                "name": f"{container_name} Memory Usage",
+                "unit": "MB",
+                "icon": "mdi:memory",
+                "device_class": None,
+                "state_class": "measurement",
             },
-            'network_rx': {
-                'name': f'{container_name} Network RX',
-                'unit': 'MB',
-                'icon': 'mdi:download-network',
-                'device_class': None,
-                'state_class': 'total_increasing'
+            "network_rx": {
+                "name": f"{container_name} Network RX",
+                "unit": "MB",
+                "icon": "mdi:download-network",
+                "device_class": None,
+                "state_class": "total_increasing",
             },
-            'network_tx': {
-                'name': f'{container_name} Network TX',
-                'unit': 'MB',
-                'icon': 'mdi:upload-network',
-                'device_class': None,
-                'state_class': 'total_increasing'
+            "network_tx": {
+                "name": f"{container_name} Network TX",
+                "unit": "MB",
+                "icon": "mdi:upload-network",
+                "device_class": None,
+                "state_class": "total_increasing",
             },
-            'disk_read': {
-                'name': f'{container_name} Disk Read',
-                'unit': 'MB',
-                'icon': 'mdi:harddisk',
-                'device_class': None,
-                'state_class': 'total_increasing'
+            "disk_read": {
+                "name": f"{container_name} Disk Read",
+                "unit": "MB",
+                "icon": "mdi:harddisk",
+                "device_class": None,
+                "state_class": "total_increasing",
             },
-            'disk_write': {
-                'name': f'{container_name} Disk Write',
-                'unit': 'MB',
-                'icon': 'mdi:harddisk',
-                'device_class': None,
-                'state_class': 'total_increasing'
-            }
+            "disk_write": {
+                "name": f"{container_name} Disk Write",
+                "unit": "MB",
+                "icon": "mdi:harddisk",
+                "device_class": None,
+                "state_class": "total_increasing",
+            },
         }
-        
+
         for metric, config in metrics_config.items():
             self.mqtt_client.publish(
                 self._get_sensor_topic(container_name, metric, "config"),
-                json.dumps({
-                    "name": config['name'],
-                    "unique_id": f"{self.prefix}{container_name}_{metric}",
-                    "state_topic": self._get_sensor_topic(container_name, metric, "state"),
-                    "unit_of_measurement": config['unit'],
-                    "icon": config['icon'],
-                    "device_class": config.get('device_class'),
-                    "state_class": config.get('state_class'),
-                    "device": self.device_config
-                }),
-                retain=True
+                json.dumps(
+                    {
+                        "name": config["name"],
+                        "unique_id": f"{self.prefix}{container_name}_{metric}",
+                        "state_topic": self._get_sensor_topic(
+                            container_name, metric, "state"
+                        ),
+                        "unit_of_measurement": config["unit"],
+                        "icon": config["icon"],
+                        "device_class": config.get("device_class"),
+                        "state_class": config.get("state_class"),
+                        "device": self.device_config,
+                    }
+                ),
+                retain=True,
             )
             logger.debug(f"Metric entity created for {container_name} - {metric}")
-    
+
     def update_container_metrics(self, container_name):
         """Update container resource metrics only if changed"""
         if not self.config.enable_metrics:
             return
-        
+
         stats = self.docker_manager.get_container_stats(container_name)
         if not stats:
             return
-        
+
         # Get current metrics
         current_metrics = {
-            'cpu': round(stats.get('cpu_percent', 0), 2),
-            'memory': round(stats.get('memory_percent', 0), 2),
-            'memory_usage': round(stats.get('memory_usage_mb', 0), 2),
-            'network_rx': round(stats.get('network_rx_mb', 0), 2),
-            'network_tx': round(stats.get('network_tx_mb', 0), 2),
-            'disk_read': round(stats.get('blkio_read_mb', 0), 2),
-            'disk_write': round(stats.get('blkio_write_mb', 0), 2)
+            "cpu": round(stats.get("cpu_percent", 0), 2),
+            "memory": round(stats.get("memory_percent", 0), 2),
+            "memory_usage": round(stats.get("memory_usage_mb", 0), 2),
+            "network_rx": round(stats.get("network_rx_mb", 0), 2),
+            "network_tx": round(stats.get("network_tx_mb", 0), 2),
+            "disk_read": round(stats.get("blkio_read_mb", 0), 2),
+            "disk_write": round(stats.get("blkio_write_mb", 0), 2),
         }
-        
+
         # Get last known metrics for this container
         last_metrics = self.known_container_metrics.get(container_name, {})
-        
+
         # Only publish metrics that have changed
         for metric, value in current_metrics.items():
-            if metric not in last_metrics or abs(last_metrics[metric] - value) >= 0.01:  # Threshold for change
+            if (
+                metric not in last_metrics or abs(last_metrics[metric] - value) >= 0.01
+            ):  # Threshold for change
                 self.mqtt_client.publish(
-                    self._get_sensor_topic(container_name, metric, "state"),
-                    str(value)
+                    self._get_sensor_topic(container_name, metric, "state"), str(value)
                 )
-                logger.debug(f"Métrica actualizada para {container_name}.{metric}: {value}")
-        
+                logger.debug(
+                    f"Métrica actualizada para {container_name}.{metric}: {value}"
+                )
+
         # Update known metrics
         self.known_container_metrics[container_name] = current_metrics
-    
+
     def delete_metric_entities(self, container_name):
         """Delete MQTT sensor entities for container metrics"""
-        metrics = ['cpu', 'memory', 'memory_usage', 'network_rx', 'network_tx', 'disk_read', 'disk_write']
+        metrics = [
+            "cpu",
+            "memory",
+            "memory_usage",
+            "network_rx",
+            "network_tx",
+            "disk_read",
+            "disk_write",
+        ]
         for metric in metrics:
-            self.mqtt_client.publish(self._get_sensor_topic(container_name, metric, "config"), "")
-            self.mqtt_client.publish(self._get_sensor_topic(container_name, metric, ""), "")
+            self.mqtt_client.publish(
+                self._get_sensor_topic(container_name, metric, "config"), ""
+            )
+            self.mqtt_client.publish(
+                self._get_sensor_topic(container_name, metric, ""), ""
+            )
 
 
 def main(args):
