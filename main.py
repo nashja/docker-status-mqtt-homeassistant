@@ -88,7 +88,10 @@ class DockerMQTT:
                 self.execute_command(command, container_name)
             elif topic.endswith("/config"):
                 if container_name not in self.known_docker_statuses and msg.payload:
-                    self.delete_entity(container_name)
+                    logger.debug(
+                        f"I am not going to delete {container_name}: command is  {msg.payload.decode()} topic is {topic}"
+                     )
+                    #self.delete_entity(container_name)
         except Exception as e:
             logger.error(
                 f"Error al ejecutar el comando {command} para {container_name}: {str(e)}"
