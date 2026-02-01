@@ -49,7 +49,11 @@ class Config:
         else:
             self.include_only = None
         self.use_cmd_local = use_cmd_local
-        self.entity_name = entity_name
+        user_entity_name = os.getenv("ENTITY_NAME", None)
+        if user_entity_name :
+            self.entity_name = user_entity_name
+        else:
+            self.entity_name = entity_name
 
         if entity_prefix is None:
             entity_prefix = entity_name.lower().replace(" ", "_") + "_"
