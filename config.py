@@ -6,6 +6,7 @@ from docker_manager import (
     LocalCommandExecutor,
 )
 
+import logging
 
 class Config:
     def __init__(
@@ -22,7 +23,7 @@ class Config:
         exclude_only=None,
         include_only=None,
         use_cmd_local=False,
-        entity_name="Unraid Docker",
+        entity_name=None,
         entity_prefix=None,
         verbose=False,
         enable_metrics=False,
@@ -49,12 +50,11 @@ class Config:
         else:
             self.include_only = None
         self.use_cmd_local = use_cmd_local
-        user_entity_name = os.getenv("ENTITY_NAME", None)
-        if user_entity_name :
-            self.entity_name = user_entity_name
-        else:
-            self.entity_name = entity_name
-
+        #user_entity_name = os.getenv("ENTITY_NAME", None)
+        #if user_entity_name :
+        #    self.entity_name = user_entity_name
+        #else:
+        self.entity_name = entity_name or os.getenv("ENTITY_NAME", "fooMQTT")
         if entity_prefix is None:
             entity_prefix = entity_name.lower().replace(" ", "_") + "_"
         self.entity_prefix = entity_prefix

@@ -17,7 +17,7 @@ stdout_handler.setFormatter(log_formatter)
 
 logger = logging.getLogger()
 logger.addHandler(stdout_handler)
-logger.setLevel(logging.INFO)
+logger.setLevel(logging.DEBUG)
 
 
 class DockerMQTT:
@@ -30,8 +30,8 @@ class DockerMQTT:
         self.device_config = {
             "identifiers": [f"{self.prefix}containers"],
             "name": f"{config.entity_name} Containers",
-            "model": "Docker Containers",
-            "manufacturer": "Docker Container Manager",
+            "model": "DockerMQTT",
+            "manufacturer": "Sanfrancejan",
         }
 
         self.known_docker_statuses = {}
@@ -87,11 +87,13 @@ class DockerMQTT:
                 command = msg.payload.decode()
                 self.execute_command(command, container_name)
             elif topic.endswith("/config"):
-                if container_name not in self.known_docker_statuses and msg.payload:
+                if container_name not in self.known_docker_statuses: # and msg.payload:
+                    # a configuration command with an empty payload should delete - but otherwise not ...
                     logger.debug(
-                        f"I am not going to delete {container_name}: command is  {msg.payload.decode()} topic is {topic}"
+                        f"I am checking payload to delete {container_name}: command is  {msg.payload.decode()} topic is {topic}"
                      )
-                    #self.delete_entity(container_name)
+                    if not msg.payload :
+                        self.delete_entity(container_name)
         except Exception as e:
             logger.error(
                 f"Error al ejecutar el comando {command} para {container_name}: {str(e)}"

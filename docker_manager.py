@@ -295,11 +295,13 @@ class DockerSocketManager(DockerManager):
             blkio_read = 0
             blkio_write = 0
             if 'blkio_stats' in stats and 'io_service_bytes_recursive' in stats['blkio_stats']:
-                for item in stats['blkio_stats']['io_service_bytes_recursive']:
-                    if item['op'] == 'read':
-                        blkio_read += item['value']
-                    elif item['op'] == 'write':
-                        blkio_write += item['value']
+                iob = stats['blkio_stats']['io_service_bytes_recursive']
+                if iob:
+                    for item in stats['blkio_stats']['io_service_bytes_recursive']:
+                        if item['op'] == 'read':
+                            blkio_read += item['value']
+                        elif item['op'] == 'write':
+                            blkio_write += item['value']
             
             return {
                 'cpu_percent': round(cpu_percent, 2),
