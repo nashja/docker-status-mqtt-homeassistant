@@ -81,7 +81,7 @@ class DockerMQTT:
         topic = msg.topic
         if self.prefix not in topic:
             return
-        logger.debug(f"[on_message] received message topic {topic}")
+        logger.debug(f"[on_message] received message topic {topic} payload = {msg.payload}")
 
         container_name = topic.split("/")[-2].replace(self.prefix, "")
 
