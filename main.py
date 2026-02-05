@@ -45,30 +45,35 @@ class DockerMQTT:
         self.docker_manager = config.get_manager()
 
     def run(self):
+        # before running - do an update
+        # self.known_docker_statuses = self.docker_manager.get_docker_statuses()
+        # This doesn't work - maybe don't respond to messages until 
         try:
             self.connect()
             self.mqtt_client.loop_start()
             while True:
+                # TODO Make sure to do one initial read of status - and then update...
                 self.update_entities_and_statuses()
                 time.sleep(self.config.publish_interval)
         except KeyboardInterrupt:
-            logger.info("Interrupción de teclado detectada. Cerrando conexiones.")
+            logger.info("Keyboard interrupt detected. Closing conenections.")
         except Exception as e:
-            logger.critical(f"Error crítico en el programa principal: {str(e)}")
+            logger.critical(f"Critical error in main loop: {str(e)}")
         finally:
-            logger.info("Cerrando conexiones")
+            logger.info("Stopping connections")
             try:
                 self.docker_manager.close()
                 self.mqtt_client.loop_stop()
                 self.mqtt_client.disconnect()
             except Exception as e:
-                logger.error(f"Error al cerrar conexiones: {str(e)}")
-            logger.info("Servicio finalizado")
+                logger.error(f"Error stopping connectionss: {str(e)}")
+            logger.info("Service Closed")
 
     def on_connect(self, client, userdata, flags, rc, properties=None):
-        logger.info(f"Conectado a MQTT con código {rc}")
+        logger.info(f"[on_connect] Conected to MQTT with code {rc}")
         # we should always subscribe from on_connect callback to be sure
         # our subscribed is persisted across reconnections.
+        logger.info("[on_connect] Subscribing to homeassistant/switch")
         client.subscribe("homeassistant/switch/#")
 
     def on_message(self, client, userdata, msg):
@@ -85,49 +90,52 @@ class DockerMQTT:
         try:
             if topic.endswith("/command"):
                 command = msg.payload.decode()
+                logger.debug(f"[on_message] executing command {command} - container {container_name}")
                 self.execute_command(command, container_name)
             elif topic.endswith("/config"):
+                #if container_name not in self.known_docker_statuses and msg.payload:
+                #    self.delete_entity(container_name)
                 if container_name not in self.known_docker_statuses: # and msg.payload:
                     # a configuration command with an empty payload should delete - but otherwise not ...
                     logger.debug(
                         f"I am checking payload to delete {container_name}: command is  {msg.payload.decode()} topic is {topic}"
                      )
-                    if not msg.payload :
+                    if msg.payload :
                         self.delete_entity(container_name)
         except Exception as e:
             logger.error(
-                f"Error al ejecutar el comando {command} para {container_name}: {str(e)}"
+                f"Error executing {command} for container {container_name}: {str(e)}"
             )
 
     def execute_command(self, command, container_name):
-        logger.info(f"Comando recibido: {command} para {container_name}")
+        logger.info(f"Coommand recieved: {command} for {container_name}")
         if command == "ON":
-            logger.info(f"Iniciando contenedor {container_name}")
+            logger.info(f"Starting container {container_name}")
 
             self.docker_manager.start_container(container_name)
         elif command == "OFF":
-            logger.info(f"Deteniendo contenedor {container_name}")
+            logger.info(f"Stopping container {container_name}")
             self.docker_manager.stop_container(container_name)
         else:
-            logger.warning(f"Comando desconocido: {command} para {container_name}")
+            logger.warning(f"Unknown command {command} for {container_name}")
         time.sleep(1)
         container_status = self.docker_manager.get_container_status(container_name)
         if self.docker_manager.is_container_incuded(container_name):
             self.update_entity_status(container_name, container_status)
-        logger.info(f"Estado actualizado para {container_name}: {container_status}")
+        logger.info(f"Current state for {container_name}: {container_status}")
 
     def connect(self):
         try:
             self.mqtt_client.connect(self.config.mqtt_server, self.config.mqtt_port, 60)
-            logger.info(f"Conexión MQTT establecida con {self.config.mqtt_server}")
+            logger.info(f"MQTT connection established with {self.config.mqtt_server}")
 
         except Exception as e:
-            logger.error(f"Error al conectar con MQTT: {str(e)}")
+            logger.error(f"Error connecting with MQTT: {str(e)}")
             raise
 
     def update_entities_and_statuses(self):
         """Update docker entities states and create new entities if needed"""
-        logger.info("Publicando estado de los contenedores Docker en MQTT")
+        logger.info("Publishing the state of docker containers in MQTT")
         try:
             docker_statuses = self.docker_manager.get_docker_statuses()
             last_docker_statuses = self.known_docker_statuses
@@ -160,7 +168,7 @@ class DockerMQTT:
             self._update_heartbeat()
 
         except Exception as e:
-            logger.error(f"Error al publicar el estado de los contenedores: {str(e)}")
+            logger.error(f"Error publishing state of containers: {str(e)}")
 
     def _update_heartbeat(self):
         """Update heartbeat file for health checks"""
@@ -190,7 +198,21 @@ class DockerMQTT:
             ),
             retain=True,
         )
-        logger.debug(f"Configuración publicada para {container_name}")
+        logger.debug(f"[create entity] published config for - {container_name}")
+        logger.debug(f"[create entity] topic is  - {self._get_topic(container_name, "config")}")
+        logger.debug(f"[create entity] payload is  - {json.dumps(
+                {
+                    "name": container_name,
+                    "unique_id": f"{self.prefix}{container_name}",
+                    "command_topic": self._get_topic(container_name, "command"),
+                    "state_topic": self._get_topic(container_name, "state"),
+                    "payload_on": "ON",
+                    "payload_off": "OFF",
+                    "state_on": "ON",
+                    "state_off": "OFF",
+                    "device": self.device_config,
+                }
+            )}")     
 
     def delete_entity(self, container_name):
         self.mqtt_client.publish(self._get_topic(container_name, "config"), "")
@@ -200,13 +222,14 @@ class DockerMQTT:
             # Clean up metrics cache
             if container_name in self.known_container_metrics:
                 del self.known_container_metrics[container_name]
-        logger.debug(f"Configuración eliminada para {container_name}")
+        logger.debug(f"deleted configuration for {container_name}")
 
     def update_entity_status(self, container_name, container_state):
         """
         Publish the state of the container to the MQTT broker only if changed
         Possible docker container states are: created, running, paused, restarting, removing, exited and dead.
         But we are only interested in running and stopped containers
+        TODO - should do this periodically - on startup, and then maybe once an hour?
         """
         state = "ON" if container_state.lower() == "running" else "OFF"
 
@@ -216,7 +239,7 @@ class DockerMQTT:
             container_state.lower() == "running"
         ):
             self.mqtt_client.publish(self._get_topic(container_name, "state"), state)
-            logger.debug(f"Estado actualizado para {container_name}: {state}")
+        logger.debug(f"Current state for {container_name}: {state}")
 
     def _get_topic(self, container_name, topic):
         assert topic in ["state", "command", "config", ""]
@@ -334,7 +357,7 @@ class DockerMQTT:
                     self._get_sensor_topic(container_name, metric, "state"), str(value)
                 )
                 logger.debug(
-                    f"Métrica actualizada para {container_name}.{metric}: {value}"
+                    f"Metric created for {container_name}.{metric}: {value}"
                 )
 
         # Update known metrics
@@ -361,7 +384,7 @@ class DockerMQTT:
 
 
 def main(args):
-    logger.info("Iniciando el servicio Docker Status MQTT")
+    logger.info("Starting the service Docker Status MQTT")
     service = DockerMQTT(config=Config(**vars(args)))
     service.run()
 
