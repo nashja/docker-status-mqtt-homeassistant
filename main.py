@@ -46,7 +46,10 @@ class DockerMQTT:
 
     def run(self):
         try:
-            self.get_initial_docker_statuses()
+            # just doing this doesn't create the entities
+            #self.get_initial_docker_statuses()
+            # try doing the below before connecting (and getting all the subscription messages)
+            self.update_entities_and_statuses()
             time.sleep(5)
             self.connect()
             self.mqtt_client.loop_start()
@@ -220,7 +223,7 @@ class DockerMQTT:
                     "state_off": "OFF",
                     "device": self.device_config,
                 }
-            )}")     
+            )} with Retain = True")     
 
     def delete_entity(self, container_name):
         self.mqtt_client.publish(self._get_topic(container_name, "config"), "")
@@ -333,6 +336,21 @@ class DockerMQTT:
                 retain=True,
             )
             logger.debug(f"Metric entity created for {container_name} - {metric}")
+            logger.debug(
+                    f"{json.dumps(
+                    {
+                        "name": config["name"],
+                        "unique_id": f"{self.prefix}{container_name}_{metric}",
+                        "state_topic": self._get_sensor_topic(
+                            container_name, metric, "state"
+                        ),
+                        "unit_of_measurement": config["unit"],
+                        "icon": config["icon"],
+                        "device_class": config.get("device_class"),
+                        "state_class": config.get("state_class"),
+                        "device": self.device_config,
+                    }
+                )} with retain = True")
 
     def update_container_metrics(self, container_name):
         """Update container resource metrics only if changed"""
@@ -366,7 +384,7 @@ class DockerMQTT:
                     self._get_sensor_topic(container_name, metric, "state"), str(value)
                 )
                 logger.debug(
-                    f"Metric created for {container_name}.{metric}: {value}"
+                    f"[update metrics] Metric for {container_name}.{metric}: state set to -> {value}"
                 )
 
         # Update known metrics
@@ -390,6 +408,8 @@ class DockerMQTT:
             self.mqtt_client.publish(
                 self._get_sensor_topic(container_name, metric, ""), ""
             )
+            logger.debug(
+                    f"[delete metrics] Metric for {container_name}.{metric}/config/  - sent to delete")
 
 
 def main(args):
