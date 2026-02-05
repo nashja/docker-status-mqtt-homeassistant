@@ -46,6 +46,8 @@ class DockerMQTT:
 
     def run(self):
         try:
+            self.get_initial_docker_statuses()
+            time.sleep(5)
             self.connect()
             self.mqtt_client.loop_start()
             while True:
@@ -79,6 +81,7 @@ class DockerMQTT:
         topic = msg.topic
         if self.prefix not in topic:
             return
+        logger.debug(f"[on_message] received message topic {topic}")
 
         container_name = topic.split("/")[-2].replace(self.prefix, "")
 
@@ -124,6 +127,15 @@ class DockerMQTT:
         except Exception as e:
             logger.error(f"Error al conectar con MQTT: {str(e)}")
             raise
+
+    def get_initial_docker_statuses(self):
+        logger.info("Getting initial status of docker containers")
+        try:
+            self.known_docker_statuses = self.docker_manager.get_docker_statuses()   
+            for container_name, container_state in self.known_docker_statuses.items():
+                logger.info(f"Initial state: Container {container_name} - state {container_state}")
+        except Exception as e:
+            logger.error(f"Unable to update docker status: {str(e)}")       
 
     def update_entities_and_statuses(self):
         """Update docker entities states and create new entities if needed"""
@@ -209,14 +221,15 @@ class DockerMQTT:
         But we are only interested in running and stopped containers
         """
         state = "ON" if container_state.lower() == "running" else "OFF"
-
+        self.mqtt_client.publish(self._get_topic(container_name, "state"), state)
+        logger.debug(f"Publishing current state for  {container_name}: {state}")
         # Only publish if state has changed
         last_state = self.known_docker_statuses.get(container_name)
-        if last_state is None or (last_state.lower() == "running") != (
-            container_state.lower() == "running"
-        ):
-            self.mqtt_client.publish(self._get_topic(container_name, "state"), state)
-            logger.debug(f"Estado actualizado para {container_name}: {state}")
+        #if last_state is None or (last_state.lower() == "running") != (
+        #    container_state.lower() == "running"
+        #):
+        #    self.mqtt_client.publish(self._get_topic(container_name, "state"), state)
+        #    logger.debug(f"Estado actualizado para {container_name}: {state}")
 
     def _get_topic(self, container_name, topic):
         assert topic in ["state", "command", "config", ""]
