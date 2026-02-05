@@ -49,6 +49,10 @@ class DockerMQTT:
             # just doing this doesn't create the entities
             #self.get_initial_docker_statuses()
             # try doing the below before connecting (and getting all the subscription messages)
+            # none of the initial entities and status are actually being created as not yet connected..
+            # it is doing a publish before connection ...
+            #
+            # also - it is publishing the metrics, when we don't need them, so something isn/t correct
             self.update_entities_and_statuses()
             time.sleep(5)
             self.connect()
