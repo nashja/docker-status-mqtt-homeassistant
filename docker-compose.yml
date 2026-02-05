@@ -11,4 +11,10 @@ services:
     restart: unless-stopped
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock
-      
+    networks:
+      - my_shared_network
+
+networks:
+  my_shared_network:
+    external: true
+    
