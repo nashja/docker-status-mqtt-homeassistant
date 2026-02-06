@@ -36,6 +36,7 @@ class DockerMQTT:
 
         self.known_docker_statuses = {}
         self.known_container_metrics = {}  # Track last published metrics
+        self.retained_container_configs = {}
 
         self.mqtt_client = mqtt.Client(mqtt.CallbackAPIVersion.VERSION2)
         self.mqtt_client.username_pw_set(config.mqtt_user, config.mqtt_password)
@@ -53,8 +54,8 @@ class DockerMQTT:
             # it is doing a publish before connection ...
             #
             # also - it is publishing the metrics, when we don't need them, so something isn/t correct
-            self.update_entities_and_statuses()
-            time.sleep(5)
+            #self.update_entities_and_statuses()
+            #time.sleep(5)
             self.connect()
             self.mqtt_client.loop_start()
             while True:
@@ -104,9 +105,13 @@ class DockerMQTT:
                 if container_name not in self.known_docker_statuses: # and msg.payload:
                     # a configuration command with an empty payload should delete - but otherwise not ...
                     logger.debug(
-                        f"I am checking payload to delete {container_name}: command is  {msg.payload.decode()} topic is {topic}"
+                        f"[on_message] recieved an inital config message for {container_name}: command is  {msg.payload.decode()} topic is {topic}"
                      )
+                    self.retained_container_configs[container_name]= msg.payload.decode()
                     if not msg.payload :
+                        logger.debug(
+                            f"[on_message] Will delete entity for {container_name}: As there is an empty payload and topic is {topic}"
+                        )
                         self.delete_entity(container_name)
         except Exception as e:
             logger.error(
