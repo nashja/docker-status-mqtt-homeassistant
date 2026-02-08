@@ -17,7 +17,7 @@ stdout_handler.setFormatter(log_formatter)
 
 logger = logging.getLogger()
 logger.addHandler(stdout_handler)
-logger.setLevel(logging.DEBUG)
+logger.setLevel(logging.INFO)
 
 
 class DockerMQTT:
@@ -218,9 +218,9 @@ class DockerMQTT:
             ),
             retain=True,
         )
-        logger.debug(f"[create entity] published config for - {container_name}")
-        logger.debug(f"[create entity] topic is  - {self._get_topic(container_name, "config")}")
-        logger.debug(f"[create entity] payload is  - {json.dumps(
+        logger.info(f"[create entity] published config for - {container_name}")
+        logger.info(f"[create entity] topic is  - {self._get_topic(container_name, "config")}")
+        logger.info(f"[create entity] payload is  - {json.dumps(
                 {
                     "name": container_name,
                     "unique_id": f"{self.prefix}{container_name}",

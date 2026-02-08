@@ -53,7 +53,7 @@ class DockerManager(ABC):
                     break
 
         except Exception as e:
-            logger.debug(f"Could not auto-exclude self container: {e}")
+            bug(f"Could not auto-exclude self container: {e}")
 
     def is_container_incuded(self, container_name):
         if self.include_only:

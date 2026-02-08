@@ -26,7 +26,7 @@ class Config:
         entity_name=None,
         entity_prefix=None,
         verbose=False,
-        enable_metrics=False,
+        enable_metrics=False
     ):
         self.unraid_host = unraid_host or os.getenv("SSH_HOST")
         self.unraid_port = int(unraid_port or os.getenv("SSH_PORT", 22))
