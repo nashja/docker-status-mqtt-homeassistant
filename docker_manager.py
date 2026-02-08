@@ -4,6 +4,8 @@ import socket
 import subprocess
 import json
 from abc import ABC, abstractmethod
+from datetime import datetime, timedelta
+from dateutil import parser
 
 import docker
 import paramiko
@@ -250,24 +252,6 @@ class DockerSocketManager(DockerManager):
 
     def get_all_statuses(self):
         containers = self.client.containers.list(all=True)
-        for c in containers :
-            attrs = c.attrs
-            cname = c.name
-            cid = c.short_id
-            cstat = c.status
-            ctags = c.image.tags
-            ctl = len(ctags)
-            ctag = ctags[ctl-1]
-            created = attrs['Created']
-            state = attrs['State']
-            finished = state['FinishedAt']
-            ecode  = state['ExitCode']
-            print(" foo :" , cname, cid, cstat, ctag)
-            #try:
-            #    logger.debug(f"[get_container_status: name:{cname}, short_id{cid}, status:{cstat}, image: {ctag}")
-            #except Exception as e:
-            #    logger.debug(f" failed to get stauts from container error = {e}")
-        containers = self.client.containers.list(all=True)
         return {c.name: c.status for c in containers}
 
     def _start_container(self, container_name):
@@ -283,6 +267,29 @@ class DockerSocketManager(DockerManager):
         attrs = container.attrs
         logger.debug(f"[get_container_status: name:{attrs['name']}, short_id{attrs['short_id']}, status:{attrs['Status']}, image: {attrs['Image']}")
         return container.status
+    
+    def get_container_info(self, container_name):
+        c = self.client.containers.get(container_name)
+        info={}
+        attrs = c.attrs
+        info['Name'] = c.name
+        info['Id'] = c.short_id
+        info['Status'] = c.status
+        ctags = c.image.tags
+        ctl = len(ctags)
+        info['Tag'] = ctags[ctl-1]
+        info['Created'] = attrs['Created']
+        state = attrs['State']
+        info['FinishedAt'] = state['FinishedAt']
+        info['ExitCode']  = state['ExitCode']
+        json_info = json.dumps(info, indent=4)
+        now = datetime.datetime.now()
+        #ds = '2012-03-01T10:00:00Z' 
+        created = parser.parse(info['Created'])
+        tdif = now-created
+        print("created at ",str(tdif))
+
+        print("[container info]",json_info)
     
     def get_container_stats(self, container_name) -> dict:
         """Get container resource statistics using Docker API"""

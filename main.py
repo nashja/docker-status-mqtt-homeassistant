@@ -3,6 +3,7 @@ import json
 import logging
 import sys
 import time
+from datetime import datetime, timedelta
 
 import paho.mqtt.client as mqtt
 
@@ -166,6 +167,7 @@ class DockerMQTT:
             logger.info(f"Running: {','.join(running_containers)}")
 
             for container_name, container_state in docker_statuses.items():
+                info_dict = self.docker_manager.get_container_info(container_name)
                 self.update_entity_status(container_name, container_state)
                 if container_name not in last_docker_statuses:
                     self.create_entity(container_name)
