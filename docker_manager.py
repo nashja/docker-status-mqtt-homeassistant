@@ -2,6 +2,7 @@ import logging
 import os
 import socket
 import subprocess
+import json
 from abc import ABC, abstractmethod
 
 import docker
@@ -121,12 +122,14 @@ class DockerCommandManager(DockerManager):
             A dictionary where keys are container names and values are their states.
         """
         output = self.command_executor.run_command(
-            "docker ps -a --format '{{.Names}}:{{.State}}'"
+            #"docker ps -a --format '{{.Names}}:{{.State}}'"
+            "docker ps -s --format json"
         )
         status_dict = {}
-        for line in output.splitlines():
-            name, state = line.split(":", 1)
-            status_dict[name] = state
+        status_dict = json.loads(output)
+        #for line in output.splitlines():
+        #    name, state = line.split(":", 1)
+        #    status_dict[name] = state
         return status_dict
 
     def _start_container(self, container_name):
@@ -247,6 +250,24 @@ class DockerSocketManager(DockerManager):
 
     def get_all_statuses(self):
         containers = self.client.containers.list(all=True)
+        for c in containers :
+            attrs = c.attrs
+            cname = c.name
+            cid = c.short_id
+            cstat = c.status
+            ctags = c.image.tags
+            ctl = len(ctags)
+            ctag = ctags[ctl-1]
+            created = attrs['Created']
+            state = attrs['State']
+            finished = state['FinishedAt']
+            ecode  = state['ExitCode']
+            print(" foo :" , cname, cid, cstat, ctag)
+            #try:
+            #    logger.debug(f"[get_container_status: name:{cname}, short_id{cid}, status:{cstat}, image: {ctag}")
+            #except Exception as e:
+            #    logger.debug(f" failed to get stauts from container error = {e}")
+        containers = self.client.containers.list(all=True)
         return {c.name: c.status for c in containers}
 
     def _start_container(self, container_name):
@@ -259,6 +280,8 @@ class DockerSocketManager(DockerManager):
 
     def get_container_status(self, container_name):
         container = self.client.containers.get(container_name)
+        attrs = container.attrs
+        logger.debug(f"[get_container_status: name:{attrs['name']}, short_id{attrs['short_id']}, status:{attrs['Status']}, image: {attrs['Image']}")
         return container.status
     
     def get_container_stats(self, container_name) -> dict:
