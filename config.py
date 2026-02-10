@@ -27,7 +27,7 @@ class Config:
         entity_prefix=None,
         verbose=False,
         enable_metrics=False,
-        enable_status_sensors=True
+        enable_status=True,
     ):
         self.unraid_host = unraid_host or os.getenv("SSH_HOST")
         self.unraid_port = int(unraid_port or os.getenv("SSH_PORT", 22))
@@ -51,10 +51,7 @@ class Config:
         else:
             self.include_only = None
         self.use_cmd_local = use_cmd_local
-        #user_entity_name = os.getenv("ENTITY_NAME", None)
-        #if user_entity_name :
-        #    self.entity_name = user_entity_name
-        #else:
+        
         self.entity_name = entity_name or os.getenv("ENTITY_NAME", "fooMQTT")
         if entity_prefix is None:
             entity_prefix = entity_name.lower().replace(" ", "_") + "_"
@@ -62,8 +59,7 @@ class Config:
 
         self.verbose = verbose
         self.enable_metrics = enable_metrics or os.getenv("ENABLE_METRICS", "false").lower() == "true"
-
-        self.enable_status_sensors= enable_status_sensors
+        self.enable_status = enable_status or os.getenv("ENABLE_STATUS", "false").lower() == "true"
 
         self.validate_config()
 

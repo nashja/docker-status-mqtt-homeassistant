@@ -176,7 +176,7 @@ class DockerMQTT:
                     self.create_entity(container_name)
                     if self.config.enable_metrics:
                         self.create_metric_entities(container_name)
-                    if self.config.enable_status_sensors:
+                    if self.config.enable_status:
                         self.create_status_entities(container_name)
                 # Update metrics for running containers
                 if container_state.lower() == "running" and self.config.enable_metrics:
@@ -190,7 +190,7 @@ class DockerMQTT:
                 #
                 # Check whether to delete here, but these are visible whether running or not ...
                 #
-                if self.config.enable_status_sensors:
+                if self.config.enable_status:
                     self.update_container_status(container_name)
             # Update known statuses after processing all containers
             self.known_docker_statuses = docker_statuses
@@ -278,6 +278,10 @@ class DockerMQTT:
         """Get MQTT topic for sensor entities"""
         assert topic in ["state", "config", ""]
         return f"homeassistant/sensor/{self.prefix}{container_name}_{metric}/{topic}"
+    
+    def _get_component_topic(self, container_name, component, status, topic):
+        assert topic in ["state", "config"]
+        return f"homeassistant/{component}/{self.prefix}{container_name}_{status}/{topic}"        
 
     def create_metric_entities(self, container_name):
         """Create MQTT sensor entities for container metrics"""
@@ -437,12 +441,15 @@ class DockerMQTT:
 
     def create_status_entities(self, container_name):
         """Create MQTT sensor entities for container status"""
+        # the keys must match the keys in the container info (but lowered)
+        # note the text/number components need to define a command topic - so just make them all sensors as before ...
         status_config = {
             "created": {
                 "name": f"{container_name} Created",
                 "icon": "mdi:clock-outline",
                 "device_class": "timestamp",
                 "state_class": None,
+                "component":"sensor",
             },
             "finishedat": {
                 "name": f"{container_name} Finished",
@@ -450,37 +457,70 @@ class DockerMQTT:
                 "icon": "mdi:clock-alert",
                 "device_class": "timestamp",
                 "state_class": None,
+                "component":"sensor",                
             },
-            
+            "startedat": {
+                "name": f"{container_name} Started",
+                "unit": "%",
+                "icon": "mdi:clock",
+                "device_class": "timestamp",
+                "state_class": None,
+                "component":"sensor",               
+            },
+            "image": {
+                "name": f"{container_name} Image",
+                "unit": "%",
+                "icon": "mdi:clock",
+                "device_class": None,
+                "state_class": None,
+                "component":"sensor",
+            },
+            "id": {
+                "name": f"{container_name} Id",
+                "unit": "%",
+                "icon": "mdi:clock",
+                "state_class": None,
+                "device_class": None,                
+                "component":"sensor",
+            },    
+            "exitcode": {
+                "name": f"{container_name} ExitCode",
+                "unit": "%",
+                "icon": "mdi:clock",
+                "state_class": None,
+                "device_class": None,                
+                "component":"sensor",
+            },                
         }
+        self.status_config=status_config
 
         for status, config in status_config.items():
             self.mqtt_client.publish(
-                self._get_sensor_topic(container_name, status.lower(), "config"),
+                self._get_component_topic(container_name, config.get("component"),status.lower(), "config"),
                 json.dumps(
                     {
                         "name": config["name"],
                         "unique_id": f"{self.prefix}{container_name}_{status.lower()}",
-                        "state_topic": self._get_sensor_topic(
-                            container_name, status.lower(), "state"
+                        "state_topic": self._get_component_topic(
+                            container_name, config.get("component"), status.lower(), "state"
                         ),
                      #   "unit_of_measurement": config["unit"],
                         "icon": config["icon"],
                         "device_class": config.get("device_class"),
-                     #   "state_class": config.get("state_class"),
+                        "state_class": config.get("state_class"),
                         "device": self.device_config,
                     }
                 ),
                 retain=True,
             )
-            logger.debug(f"Status entity created for {container_name} - {status.lower()}")
-            logger.debug(
+            logger.info(f"Status entity created for {container_name} - {status.lower()}")
+            logger.info(
                     f"{json.dumps(
                     {
                         "name": config["name"],
                         "unique_id": f"{self.prefix}{container_name}_{status.lower()}",
-                        "state_topic": self._get_sensor_topic(
-                            container_name, status.lower(), "state"
+                        "state_topic": self._get_component_topic(
+                            container_name, config.get("component"), status.lower(), "state"
                         ),
                      #   "unit_of_measurement": config["unit"],
                         "icon": config["icon"],
@@ -493,7 +533,7 @@ class DockerMQTT:
 
     def update_container_status(self, container_name):
         """Update container resource metrics only if changed"""
-        if not self.config.enable_status_sensors:
+        if not self.config.enable_status:
             return
 
         current_status  = self.docker_manager.get_container_info(container_name)
@@ -510,7 +550,9 @@ class DockerMQTT:
                 status not in last_status or last_status[status] != current_status[status]  or never_published
             ):  # Threshold for change
                 self.mqtt_client.publish(
-                    self._get_sensor_topic(container_name, status.lower(), "state"), str(value)
+                    self._get_component_topic(container_name, self.status_config.get("component","sensor"),status.lower(), "state"),
+                    #self._get_sensor_topic(container_name, status.lower(), "state"), 
+                    str(value)
                 )
                 logger.debug(
                     f"[update status] Status for {container_name}.{status.lower()}: state set to -> {value}"
@@ -538,10 +580,10 @@ if __name__ == "__main__":
     )
     parser.add_argument("--verbose", action="store_true", help="Activar modo verbose")
     parser.add_argument(
-        "--name",
+        "--entity_name",
         dest="entity_name",
-        help="Nombre del dispositivo en Home Assistant",
-        default="Unraid Docker",
+        help="Name of the Docker host",
+        default="LocalHost",
     )
     parser.add_argument(
         "--unraid_host",
@@ -568,37 +610,37 @@ if __name__ == "__main__":
     )
     parser.add_argument(
         "--mqtt_server",
-        help="URL del broker MQTT",
+        help="URL for MQTT broker",
         default=None,
     )
     parser.add_argument(
         "--mqtt_port",
-        help="Puerto del broker MQTT",
+        help="Port for MQTT broker",
         default=None,
     )
     parser.add_argument(
         "--mqtt_user",
-        help="Usuario del broker MQTT",
+        help="User name for MQTT broker",
         default=None,
     )
     parser.add_argument(
         "--mqtt_password",
-        help="Contraseña del broker MQTT",
+        help="Password for MQTT broker",
         default=None,
     )
     parser.add_argument(
         "--publish_interval",
-        help="Intervalo de publicación en segundos",
+        help="Interval for publishing updates",
         default=None,
     )
     parser.add_argument(
         "--exclude_only",
-        help="Contenedores a excluir",
+        help="List of containers to exclude",
         default=None,
     )
     parser.add_argument(
         "--include_only",
-        help="Contenedores a incluir",
+        help="List of containers to include",
         default=None,
     )
     parser.add_argument(
@@ -606,14 +648,21 @@ if __name__ == "__main__":
         help="Usar comandos locales en lugar de SSH",
         action="store_true",
     )
+    # Better to use entity_name ..
     parser.add_argument(
         "--entity_prefix",
-        help="Prefijo de los dispositivos en Home Assistant",
+        help="Prefix for home assistant Device",
         default=None,
     )
     parser.add_argument(
         "--enable_metrics",
-        help="Habilitar métricas de contenedores (CPU, memoria, red, disco)",
+        help="Create sensors for measured information about containers (cpu/memory)",
+        action="store_true",
+    )
+
+    parser.add_argument(
+        "--enable_status",
+        help="Create sensors for the status of containers",
         action="store_true",
     )
 
