@@ -4,7 +4,7 @@ import socket
 import subprocess
 import json
 from abc import ABC, abstractmethod
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from dateutil import parser
 
 import docker
@@ -264,32 +264,33 @@ class DockerSocketManager(DockerManager):
 
     def get_container_status(self, container_name):
         container = self.client.containers.get(container_name)
-        attrs = container.attrs
-        logger.debug(f"[get_container_status: name:{attrs['name']}, short_id{attrs['short_id']}, status:{attrs['Status']}, image: {attrs['Image']}")
         return container.status
     
     def get_container_info(self, container_name):
-        c = self.client.containers.get(container_name)
-        info={}
-        attrs = c.attrs
-        info['Name'] = c.name
-        info['Id'] = c.short_id
-        info['Status'] = c.status
-        ctags = c.image.tags
-        ctl = len(ctags)
-        info['Tag'] = ctags[ctl-1]
-        info['Created'] = attrs['Created']
-        state = attrs['State']
-        info['FinishedAt'] = state['FinishedAt']
-        info['ExitCode']  = state['ExitCode']
-        json_info = json.dumps(info, indent=4)
-        now = datetime.datetime.now()
-        #ds = '2012-03-01T10:00:00Z' 
-        created = parser.parse(info['Created'])
-        tdif = now-created
-        print("created at ",str(tdif))
+        try :
+            c = self.client.containers.get(container_name)
+            info={}
+            attrs = c.attrs
+            info['Name'] = attrs['Name']
+            info['Id'] = c.short_id
+            info['Status'] = attrs['State']['Status']
+            info['Created']= attrs['Created']
+            info['Image']=attrs['Config']['Image']
+            info['FinishedAt']=attrs['State']['FinishedAt']
+            info['StartedAt']=attrs['State']['StartedAt']
+            info['ExitCode'] = attrs['State']['ExitCode']
+            #json_info = json.dumps(info, indent=4)
+            #now = datetime.now(timezone.utc)
+            #created = parser.parse(info['Created'])
+            #tdif = now-created
+            #print("created at ",str(tdif))
+            #print("[container info]",json_info)
+            return info
+        except Exception as e:
+            logger.error(f"Error getting status for container {container_name}: {e}")
+            return{}
 
-        print("[container info]",json_info)
+    
     
     def get_container_stats(self, container_name) -> dict:
         """Get container resource statistics using Docker API"""

@@ -26,7 +26,8 @@ class Config:
         entity_name=None,
         entity_prefix=None,
         verbose=False,
-        enable_metrics=False
+        enable_metrics=False,
+        enable_status_sensors=True
     ):
         self.unraid_host = unraid_host or os.getenv("SSH_HOST")
         self.unraid_port = int(unraid_port or os.getenv("SSH_PORT", 22))
@@ -61,6 +62,8 @@ class Config:
 
         self.verbose = verbose
         self.enable_metrics = enable_metrics or os.getenv("ENABLE_METRICS", "false").lower() == "true"
+
+        self.enable_status_sensors= enable_status_sensors
 
         self.validate_config()
 

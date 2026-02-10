@@ -37,7 +37,10 @@ class DockerMQTT:
 
         self.known_docker_statuses = {}
         self.known_container_metrics = {}  # Track last published metrics
+        self.known_container_status = {}
         self.retained_container_configs = {}
+        self.never_published_state = {}
+        self.never_published_status = {}
 
         self.mqtt_client = mqtt.Client(mqtt.CallbackAPIVersion.VERSION2)
         self.mqtt_client.username_pw_set(config.mqtt_user, config.mqtt_password)
@@ -167,12 +170,14 @@ class DockerMQTT:
             logger.info(f"Running: {','.join(running_containers)}")
 
             for container_name, container_state in docker_statuses.items():
-                info_dict = self.docker_manager.get_container_info(container_name)
+                #info_dict = self.docker_manager.get_container_info(container_name)
                 self.update_entity_status(container_name, container_state)
                 if container_name not in last_docker_statuses:
                     self.create_entity(container_name)
                     if self.config.enable_metrics:
                         self.create_metric_entities(container_name)
+                    if self.config.enable_status_sensors:
+                        self.create_status_entities(container_name)
                 # Update metrics for running containers
                 if container_state.lower() == "running" and self.config.enable_metrics:
                     self.update_container_metrics(container_name)
@@ -182,7 +187,11 @@ class DockerMQTT:
                     # Clean up metrics cache for stopped containers
                     if container_name in self.known_container_metrics:
                         del self.known_container_metrics[container_name]
-
+                #
+                # Check whether to delete here, but these are visible whether running or not ...
+                #
+                if self.config.enable_status_sensors:
+                    self.update_container_status(container_name)
             # Update known statuses after processing all containers
             self.known_docker_statuses = docker_statuses
 
@@ -251,18 +260,15 @@ class DockerMQTT:
         Publish the state of the container to the MQTT broker only if changed
         Possible docker container states are: created, running, paused, restarting, removing, exited and dead.
         But we are only interested in running and stopped containers
-        TODO - should do this periodically - on startup, and then maybe once an hour?
         """
         state = "ON" if container_state.lower() == "running" else "OFF"
-        self.mqtt_client.publish(self._get_topic(container_name, "state"), state)
-        logger.debug(f"Publishing current state for  {container_name}: {state}")
-        # Only publish if state has changed
+        # Only publish if state has changed or has not yet been published
+        never_published = self.never_published_state.get(container_name, True)
         last_state = self.known_docker_statuses.get(container_name)
-        #if last_state is None or (last_state.lower() == "running") != (
-        #    container_state.lower() == "running"
-        #):
-        #    self.mqtt_client.publish(self._get_topic(container_name, "state"), state)
-        #    logger.debug(f"Estado actualizado para {container_name}: {state}")
+        if never_published or (last_state.lower() == "running") != (container_state.lower() == "running"):
+            self.mqtt_client.publish(self._get_topic(container_name, "state"), state)
+            self.never_published_state[container_name]=False
+            logger.debug(f"Publishing current state for  {container_name}: {state}")
 
     def _get_topic(self, container_name, topic):
         assert topic in ["state", "command", "config", ""]
@@ -421,6 +427,98 @@ class DockerMQTT:
             )
             logger.debug(
                     f"[delete metrics] Metric for {container_name}.{metric}/config/  - sent to delete")
+
+
+#
+# Stauts entities section
+#
+
+
+
+    def create_status_entities(self, container_name):
+        """Create MQTT sensor entities for container status"""
+        status_config = {
+            "created": {
+                "name": f"{container_name} Created",
+                "icon": "mdi:clock-outline",
+                "device_class": "timestamp",
+                "state_class": None,
+            },
+            "finishedat": {
+                "name": f"{container_name} Finished",
+                "unit": "%",
+                "icon": "mdi:clock-alert",
+                "device_class": "timestamp",
+                "state_class": None,
+            },
+            
+        }
+
+        for status, config in status_config.items():
+            self.mqtt_client.publish(
+                self._get_sensor_topic(container_name, status.lower(), "config"),
+                json.dumps(
+                    {
+                        "name": config["name"],
+                        "unique_id": f"{self.prefix}{container_name}_{status.lower()}",
+                        "state_topic": self._get_sensor_topic(
+                            container_name, status.lower(), "state"
+                        ),
+                     #   "unit_of_measurement": config["unit"],
+                        "icon": config["icon"],
+                        "device_class": config.get("device_class"),
+                     #   "state_class": config.get("state_class"),
+                        "device": self.device_config,
+                    }
+                ),
+                retain=True,
+            )
+            logger.debug(f"Status entity created for {container_name} - {status.lower()}")
+            logger.debug(
+                    f"{json.dumps(
+                    {
+                        "name": config["name"],
+                        "unique_id": f"{self.prefix}{container_name}_{status.lower()}",
+                        "state_topic": self._get_sensor_topic(
+                            container_name, status.lower(), "state"
+                        ),
+                     #   "unit_of_measurement": config["unit"],
+                        "icon": config["icon"],
+                        "device_class": config.get("device_class"),
+                     #   "state_class": config.get("state_class"),
+                        "device": self.device_config,
+                    }
+                )} with retain = True")
+
+
+    def update_container_status(self, container_name):
+        """Update container resource metrics only if changed"""
+        if not self.config.enable_status_sensors:
+            return
+
+        current_status  = self.docker_manager.get_container_info(container_name)
+        if not current_status:
+            return
+
+        # Get last known metrics for this container
+        last_status = self.known_container_status.get(container_name, {})
+
+        # Only publish metrics that have changed
+        never_published = self.never_published_status.get(container_name, True) 
+        for status, value in current_status.items():
+            if (
+                status not in last_status or last_status[status] != current_status[status]  or never_published
+            ):  # Threshold for change
+                self.mqtt_client.publish(
+                    self._get_sensor_topic(container_name, status.lower(), "state"), str(value)
+                )
+                logger.debug(
+                    f"[update status] Status for {container_name}.{status.lower()}: state set to -> {value}"
+                )
+
+        self.never_published_status[container_name]=False
+        # Update known metrics
+        self.known_container_status[container_name] = current_status
 
 
 def main(args):
